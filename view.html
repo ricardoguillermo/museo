@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Museo Itinerante — Viewer</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --fg: #111;
+        --accent: #0b5;
+      }
+      body {
+        font-family: system-ui, Arial;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      header {
+        position: sticky;
+        top: 0;
+        background: var(--accent);
+        color: #fff;
+        padding: 10px 16px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .wrap {
+        max-width: 900px;
+        margin: 14px auto;
+        padding: 0 14px;
+      }
+      .media {
+        display: grid;
+        gap: 12px;
+      }
+      img,
+      video {
+        max-width: 100%;
+        border-radius: 10px;
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      button {
+        padding: 8px 12px;
+        border: 0;
+        border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        cursor: pointer;
+      }
+      .muted {
+        opacity: 0.75;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <button id="btnTema">Claro/Oscuro</button>
+        <button onclick="history.back()">Volver</button>
+      </div>
+      <div class="bar">
+        <a id="wa" target="_blank"><button>WhatsApp</button></a>
+        <button id="copyMail">Copiar email</button>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <h1 id="titulo">Cargando…</h1>
+      <p id="desc" class="muted"></p>
+
+      <div class="media">
+        <img id="img" alt="" loading="lazy" />
+        <audio id="audio" controls></audio>
+        <video id="video" controls playsinline></video>
+      </div>
+
+      <div class="bar" style="margin-top: 10px">
+        <button id="btnLeer">🔊 Leer descripción</button>
+        <button id="btnQR" onclick="verQR()">Ver QR</button>
+      </div>
+    </div>
+
+    <script>
+      // 1) Cargar pieza desde piezas.json por ?id=001
+      const params = new URLSearchParams(location.search);
+      const id = params.get("id");
+      const DB = "./piezas.json"; // local por ahora
+
+      async function cargar() {
+        try {
+          const res = await fetch(DB, { cache: "no-store" });
+          const lista = await res.json();
+          const p = lista.find((x) => x.id === id) || lista[0];
+
+          document.getElementById(
+            "titulo"
+          ).textContent = `${p.id} — ${p.titulo}`;
+          document.getElementById("desc").textContent = p.descripcion || "";
+
+          const img = document.getElementById("img");
+          const a = document.getElementById("audio");
+          const v = document.getElementById("video");
+
+          img.src = p.img || "";
+          img.style.display = p.img ? "" : "none";
+
+          a.src = p.audio || "";
+          a.style.display = p.audio ? "" : "none";
+
+          v.src = p.video || "";
+          v.style.display = p.video ? "" : "none";
+
+          // WhatsApp comparte la URL actual
+          document.getElementById(
+            "wa"
+          ).href = `https://wa.me/?text=${encodeURIComponent(location.href)}`;
+
+          // Lectura automática
+          if (p.lectura_auto && p.descripcion) leer(p.descripcion);
+        } catch (e) {
+          document.getElementById("titulo").textContent =
+            "Error cargando pieza";
+          console.error(e);
+        }
+      }
+
+      function leer(txt) {
+        try {
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(txt);
+          u.lang = "es-ES";
+          speechSynthesis.speak(u);
+        } catch {}
+      }
+
+      document.getElementById("btnLeer").onclick = () => {
+        const d = document.getElementById("desc").textContent;
+        if (d) leer(d);
+      };
+
+      document.getElementById("copyMail").onclick = async () => {
+        await navigator.clipboard.writeText("tucorreo@ejemplo.com");
+        alert("Email copiado.");
+      };
+
+      document.getElementById("btnTema").onclick = () => {
+        const dark = document.body.dataset.theme === "dark";
+        document.body.dataset.theme = dark ? "" : "dark";
+        document.body.style.background = dark ? "var(--bg)" : "#111";
+        document.body.style.color = dark ? "var(--fg)" : "#eee";
+      };
+
+      function verQR() {
+        // Por ahora abrimos un generador de QR público con la URL actual.
+        // Luego lo reemplazamos por tu API en Render.
+        const url = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+          location.href
+        )}`;
+        window.open(url, "_blank");
+      }
+
+      cargar();
+    </script>
+  </body>
+</html>
