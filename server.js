@@ -24,7 +24,6 @@ app.use(
     },
   })
 );
-app.options("*", cors());
 
 // "DB" simple en memoria (poné acá tus piezas con URLs de Bunny)
 const piezas = [

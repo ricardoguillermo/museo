@@ -1,0 +1,23 @@
+<!DOCTYPE html><meta charset="utf-8" />
+<title>Museo — Lista</title>
+<div id="lista">Cargando…</div>
+<script>
+  const API = "https://museo-1.onrender.com";
+  async function cargar() {
+    const r = await fetch(`${API}/api/piezas`, { cache: "no-store" });
+    const piezas = await r.json();
+    lista.innerHTML = piezas
+      .map(
+        (p) =>
+          `<div style="margin:8px 0">
+       <b>${p.id}</b> — ${p.titulo}
+       <a href="view.html?id=${p.id}">ver</a>
+       <a target="_blank" href="${API}/api/qrcode?url=${encodeURIComponent(
+            location.origin + "/view.html?id=" + p.id
+          )}">QR</a>
+     </div>`
+      )
+      .join("");
+  }
+  cargar();
+</script>
