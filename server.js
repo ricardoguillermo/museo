@@ -6,16 +6,25 @@ const app = express();
 app.use(express.json());
 
 // CORS: permite Netlify y local
+import cors from "cors";
+
 const allow = [
-  process.env.ALLOW_ORIGIN || "", // ej: https://tu-sitio.netlify.app
+  process.env.ALLOW_ORIGIN, // https://museoqr.netlify.app
   "http://localhost:5500",
-].filter(Boolean);
+]
+  .filter(Boolean)
+  .map((s) => s.replace(/\/$/, "")); // sin barra final
+
 app.use(
   cors({
-    origin: (o, cb) => cb(null, !o || allow.includes(o)),
-    credentials: false,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // curl / tests locales
+      const o = origin.replace(/\/$/, "");
+      cb(null, allow.includes(o));
+    },
   })
 );
+app.options("*", cors());
 
 // "DB" simple en memoria (poné acá tus piezas con URLs de Bunny)
 const piezas = [
