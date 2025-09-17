@@ -5,18 +5,13 @@ import QRCode from "qrcode";
 const app = express();
 app.use(express.json());
 
-// CORS
-const allow = [
-  (process.env.ALLOW_ORIGIN || "").replace(/\/$/, ""), // ej: https://museoqr.netlify.app
-  "http://localhost:5500",
-].filter(Boolean);
+// Opción segura (tu Netlify + local):
+const allow = ["https://museoqr.netlify.app", "http://localhost:5500"];
 app.use(
   cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      const o = origin.replace(/\/$/, "");
-      cb(null, allow.includes(o));
-    },
+    origin: (origin, cb) =>
+      cb(null, !origin || allow.includes(origin?.replace(/\/$/, ""))),
+    credentials: false,
   })
 );
 app.options("*", cors());

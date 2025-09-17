@@ -69,6 +69,7 @@
         <a id="wa" target="_blank"><button>WhatsApp</button></a>
         <button id="copyMail">Copiar email</button>
       </div>
+      <link rel="icon" href="data:," />
     </header>
 
     <div class="wrap">
@@ -88,48 +89,86 @@
     </div>
 
     <script>
-      const API = "https://museo-1.onrender.com";
+      const API = "https://museo-2.onrender.com";
       // 1) Cargar pieza desde piezas.json por ?id=001
       const params = new URLSearchParams(location.search);
       const id = params.get("id");
       const DB = "./piezas.json"; // local por ahora
 
       async function cargar() {
+        const titulo = document.getElementById("titulo");
+        const desc = document.getElementById("desc");
+        const img = document.getElementById("img");
+        const a = document.getElementById("audio");
+        const v = document.getElementById("video");
+
+        let p = null;
+
+        // 1) Intento desde la API
         try {
-          const res = await fetch(DB, { cache: "no-store" });
-          const lista = await res.json();
-          const p = lista.find((x) => x.id === id) || lista[0];
-
-          document.getElementById(
-            "titulo"
-          ).textContent = `${p.id} — ${p.titulo}`;
-          document.getElementById("desc").textContent = p.descripcion || "";
-
-          const img = document.getElementById("img");
-          const a = document.getElementById("audio");
-          const v = document.getElementById("video");
-
-          img.src = p.img || "";
-          img.style.display = p.img ? "" : "none";
-
-          a.src = p.audio || "";
-          a.style.display = p.audio ? "" : "none";
-
-          v.src = p.video || "";
-          v.style.display = p.video ? "" : "none";
-
-          // WhatsApp comparte la URL actual
-          document.getElementById(
-            "wa"
-          ).href = `https://wa.me/?text=${encodeURIComponent(location.href)}`;
-
-          // Lectura automática
-          if (p.lectura_auto && p.descripcion) leer(p.descripcion);
+          console.log("API:", API, "ID:", id);
+          const r = await fetch(`${API}/api/piezas/${encodeURIComponent(id)}`, {
+            cache: "no-store",
+          });
+          console.log(
+            "Status:",
+            r.status,
+            "ACAO:",
+            r.headers.get("access-control-allow-origin")
+          );
+          if (r.ok) p = await r.json();
         } catch (e) {
-          document.getElementById("titulo").textContent =
-            "Error cargando pieza";
-          console.error(e);
+          console.warn("Fallo fetch API:", e);
         }
+
+        // 2) Fallback local (JSON) si la API no respondió bien
+        if (!p) {
+          try {
+            const res = await fetch(DB, { cache: "no-store" });
+            const lista = await res.json();
+            p = lista.find((x) => x.id === id) || lista[0];
+          } catch (e) {
+            titulo.textContent = "Error cargando pieza";
+            desc.textContent =
+              (e && e.message) || "Sin conexión con la API y sin JSON local.";
+            console.error(e);
+            return;
+          }
+        }
+
+        // 3) Pintar contenido
+        if (!p) {
+          titulo.textContent = "No encontrada";
+          return;
+        }
+
+        titulo.textContent = `${p.id} — ${p.titulo}`;
+        desc.textContent = p.descripcion || "";
+
+        img.src = p.img || "";
+        img.style.display = p.img ? "" : "none";
+
+        a.src = p.audio || "";
+        a.style.display = p.audio ? "" : "none";
+
+        v.src = p.video || "";
+        v.style.display = p.video ? "" : "none";
+
+        // WhatsApp comparte la URL actual
+        document.getElementById(
+          "wa"
+        ).href = `https://wa.me/?text=${encodeURIComponent(location.href)}`;
+
+        // Botón "Ver QR" (desde tu API)
+        window.verQR = () => {
+          const qrUrl = `${API}/api/qrcode?url=${encodeURIComponent(
+            location.href
+          )}`;
+          window.open(qrUrl, "_blank");
+        };
+
+        // Lectura automática
+        if (p.lectura_auto && p.descripcion) leer(p.descripcion);
       }
 
       function leer(txt) {
