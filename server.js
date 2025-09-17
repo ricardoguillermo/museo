@@ -6,11 +6,19 @@ const app = express();
 app.use(express.json());
 
 // Opción segura (tu Netlify + local):
-const allow = ["https://museoqr.netlify.app", "http://localhost:5500"];
+import cors from "cors";
+
+const allow = [
+  (process.env.ALLOW_ORIGIN || "").replace(/\/$/, ""),
+  "http://localhost:5500",
+].filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, cb) =>
       cb(null, !origin || allow.includes(origin?.replace(/\/$/, ""))),
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: false,
   })
 );
@@ -18,6 +26,20 @@ app.options("*", cors());
 
 // health check
 app.get("/", (_req, res) => res.status(200).send("OK Museo API"));
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || null;
+
+function auth(req, res, next) {
+  if (!ADMIN_TOKEN)
+    return res.status(501).json({ error: "Admin no habilitado" });
+  const h = req.headers.authorization || "";
+  if (!h.startsWith("Bearer "))
+    return res.status(401).json({ error: "Falta token" });
+  const token = h.slice(7);
+  if (token !== ADMIN_TOKEN)
+    return res.status(403).json({ error: "Token inválido" });
+  next();
+}
 
 // datos demo
 const piezas = [
@@ -62,6 +84,67 @@ app.get("/api/qrcode", async (req, res) => {
   res.set("Content-Type", "image/png");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.send(png);
+});
+
+function norm(body = {}) {
+  const etiquetas = Array.isArray(body.etiquetas)
+    ? body.etiquetas
+    : String(body.etiquetas || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+  return {
+    id: String(body.id || "").trim(),
+    titulo: String(body.titulo || "").trim(),
+    descripcion: String(body.descripcion || "").trim(),
+    img: body.img || "",
+    audio: body.audio || "",
+    video: body.video || "",
+    lectura_auto: !!body.lectura_auto,
+    etiquetas,
+    actualizado: new Date().toISOString(),
+  };
+}
+
+// Crear/actualizar (upsert)
+app.post("/api/piezas", auth, (req, res) => {
+  const p = norm(req.body || {});
+  if (!p.id || !p.titulo)
+    return res.status(400).json({ error: "id y titulo son obligatorios" });
+
+  const i = piezas.findIndex((x) => x.id === p.id);
+  if (i >= 0) piezas[i] = { ...piezas[i], ...p };
+  else piezas.push(p);
+  res.json(p);
+});
+
+// Reemplazar por id (PUT)
+app.put("/api/piezas/:id", auth, (req, res) => {
+  const id = String(req.params.id).trim();
+  const p = norm({ ...req.body, id });
+  if (!p.id || !p.titulo)
+    return res.status(400).json({ error: "id y titulo son obligatorios" });
+
+  const i = piezas.findIndex((x) => x.id === id);
+  if (i >= 0) piezas[i] = p;
+  else piezas.push(p);
+  res.json(p);
+});
+
+// Borrar
+app.delete("/api/piezas/:id", auth, (req, res) => {
+  const id = String(req.params.id).trim();
+  const len = piezas.length;
+  const rest = piezas.filter((x) => x.id !== id);
+  piezas.length = 0;
+  piezas.push(...rest);
+  res.json({ ok: true, removed: len - piezas.length });
+});
+
+// Exportar todo (backup)
+app.get("/api/export", auth, (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json(piezas);
 });
 
 const PORT = process.env.PORT || 3000;

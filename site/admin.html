@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Museo — Admin simple</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --fg: #111;
+        --accent: #0b5;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, Arial;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--accent);
+        color: #fff;
+        padding: 10px 16px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 14px auto;
+        padding: 0 14px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 16px;
+      }
+      .panel {
+        background: #fff;
+        border-radius: 14px;
+        padding: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+      }
+      .list {
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .item {
+        padding: 8px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .item:hover {
+        background: #f0f0f0;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 8px;
+        margin: 8px 0;
+      }
+      input,
+      textarea {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+        width: 100%;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .btns {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .btn {
+        padding: 8px 12px;
+        border: 0;
+        border-radius: 10px;
+        background: #eee;
+        cursor: pointer;
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .muted {
+        opacity: 0.75;
+      }
+      .thumb {
+        width: 100%;
+        max-width: 280px;
+        border-radius: 10px;
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div><b>Museo — Admin simple</b></div>
+      <nav class="bar">
+        <a class="btn" href="index.html" style="background: #fff">Lista</a>
+        <a class="btn" href="view.html?id=001" style="background: #fff"
+          >Viewer</a
+        >
+        <input
+          id="tok"
+          placeholder="Token admin"
+          style="min-width: 240px; background: #fff"
+        />
+        <button class="btn" onclick="guardarToken()">Guardar token</button>
+        <button class="btn" onclick="exportar()">Exportar todo</button>
+      </nav>
+    </header>
+
+    <div class="wrap">
+      <div class="grid">
+        <!-- LISTA -->
+        <div class="panel">
+          <div class="row" style="grid-template-columns: 1fr">
+            <input id="buscar" placeholder="Buscar por id/título…" />
+          </div>
+          <div id="lista" class="list"></div>
+        </div>
+
+        <!-- FORM -->
+        <div class="panel">
+          <h3 id="tituloForm" style="margin-top: 0">Nueva pieza</h3>
+
+          <div class="row"><label>ID</label><input id="id" /></div>
+          <div class="row"><label>Título</label><input id="titulo" /></div>
+          <div class="row">
+            <label>Descripción</label><textarea id="descripcion"></textarea>
+          </div>
+          <div class="row"><label>Imagen (URL)</label><input id="img" /></div>
+          <div class="row"><label>Audio (URL)</label><input id="audio" /></div>
+          <div class="row"><label>Video (URL)</label><input id="video" /></div>
+          <div class="row">
+            <label>Etiquetas</label
+            ><input id="etiquetas" placeholder="botánica, urbano" />
+          </div>
+          <div class="row">
+            <label>Lectura auto</label
+            ><label
+              ><input type="checkbox" id="lectura_auto" checked />
+              Activar</label
+            >
+          </div>
+
+          <div class="btns">
+            <button class="btn" onclick="nuevo()">Nuevo</button>
+            <button class="btn" onclick="copiarJSON()">Copiar JSON</button>
+            <button class="btn" onclick="descargarJSON()">
+              Descargar JSON
+            </button>
+            <button class="btn primary" onclick="guardar()">
+              Guardar en API
+            </button>
+            <button class="btn" onclick="borrar()">Borrar en API</button>
+            <button class="btn" onclick="ver()">Ver en viewer</button>
+            <button class="btn" onclick="qr()">Ver QR</button>
+          </div>
+
+          <p class="muted">
+            Este admin escribe en memoria del servidor (se pierde al redeploy).
+            Usá “Exportar todo” para respaldo.
+          </p>
+          <div id="prev" class="muted">
+            <p>Previsualización:</p>
+            <img id="prevImg" class="thumb" alt="" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API = "https://museo-2.onrender.com"; // cambia si usas museo-2
+      const key = "museo_admin_token";
+      let TOKEN = localStorage.getItem(key) || "";
+      document.getElementById("tok").value = TOKEN;
+
+      const els = (id) => document.getElementById(id);
+      let piezas = [];
+
+      function guardarToken() {
+        TOKEN = els("tok").value.trim();
+        localStorage.setItem(key, TOKEN);
+        alert("Token guardado en este navegador.");
+      }
+
+      async function init() {
+        try {
+          const r = await fetch(`${API}/api/piezas`, { cache: "no-store" });
+          if (!r.ok) throw new Error("API no responde");
+          piezas = await r.json();
+          renderLista(piezas);
+        } catch (e) {
+          els(
+            "lista"
+          ).innerHTML = `<div class="muted">Error cargando lista: ${e.message}</div>`;
+          console.error(e);
+        }
+      }
+
+      function renderLista(arr) {
+        const q = (els("buscar").value || "").toLowerCase().trim();
+        const f = arr.filter(
+          (p) =>
+            !q ||
+            (p.id || "").toLowerCase().includes(q) ||
+            (p.titulo || "").toLowerCase().includes(q)
+        );
+        f.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
+        els("lista").innerHTML =
+          f
+            .map(
+              (p) =>
+                `<div class="item" onclick="cargarPieza('${p.id.replace(
+                  /'/g,
+                  "\\'"
+                )}')"><b>${p.id}</b> — ${p.titulo || ""}</div>`
+            )
+            .join("") || `<div class="muted">Sin resultados</div>`;
+      }
+      els("buscar").addEventListener("input", () => renderLista(piezas));
+
+      async function cargarPieza(id) {
+        try {
+          const r = await fetch(`${API}/api/piezas/${encodeURIComponent(id)}`, {
+            cache: "no-store",
+          });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const p = await r.json();
+          setForm(p);
+        } catch (e) {
+          alert("No se pudo cargar: " + e.message);
+        }
+      }
+
+      function setForm(p) {
+        els("tituloForm").textContent = `Editando: ${p.id}`;
+        els("id").value = p.id || "";
+        els("titulo").value = p.titulo || "";
+        els("descripcion").value = p.descripcion || "";
+        els("img").value = p.img || "";
+        els("audio").value = p.audio || "";
+        els("video").value = p.video || "";
+        els("etiquetas").value = (p.etiquetas || []).join(", ");
+        els("lectura_auto").checked = !!p.lectura_auto;
+        actualizarPreview();
+      }
+      function getForm() {
+        const id = els("id").value.trim();
+        const titulo = els("titulo").value.trim();
+        if (!id || !titulo) {
+          alert("ID y Título son obligatorios");
+          throw new Error("faltan campos");
+        }
+        return {
+          id,
+          titulo,
+          descripcion: els("descripcion").value.trim(),
+          img: els("img").value.trim(),
+          audio: els("audio").value.trim(),
+          video: els("video").value.trim(),
+          lectura_auto: els("lectura_auto").checked,
+          etiquetas: (els("etiquetas").value || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        };
+      }
+      function nuevo() {
+        els("tituloForm").textContent = "Nueva pieza";
+        [
+          "id",
+          "titulo",
+          "descripcion",
+          "img",
+          "audio",
+          "video",
+          "etiquetas",
+        ].forEach((k) => (els(k).value = ""));
+        els("lectura_auto").checked = true;
+        actualizarPreview();
+      }
+      function copiarJSON() {
+        const p = getForm();
+        navigator.clipboard
+          .writeText(JSON.stringify(p, null, 2))
+          .then(() => alert("JSON copiado"));
+      }
+      function descargarJSON() {
+        const p = getForm();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(
+          new Blob([JSON.stringify(p, null, 2)], { type: "application/json" })
+        );
+        a.download = `pieza_${p.id}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+      function ver() {
+        const id = els("id").value.trim();
+        if (!id) return alert("Completa el ID");
+        window.open(`view.html?id=${encodeURIComponent(id)}`, "_blank");
+      }
+      function qr() {
+        const id = els("id").value.trim();
+        if (!id) return alert("Completa el ID");
+        const viewerAbs =
+          location.origin + "/view.html?id=" + encodeURIComponent(id);
+        window.open(
+          `${API}/api/qrcode?url=${encodeURIComponent(viewerAbs)}`,
+          "_blank"
+        );
+      }
+      function actualizarPreview() {
+        const src = els("img").value.trim();
+        els("prevImg").src = src || "";
+        els("prevImg").style.display = src ? "" : "none";
+      }
+      ["img"].forEach((id) =>
+        els(id).addEventListener("input", actualizarPreview)
+      );
+
+      async function guardar() {
+        if (!TOKEN) return alert("Falta token admin. Cárgalo arriba.");
+        const p = getForm();
+        try {
+          const r = await fetch(`${API}/api/piezas`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${TOKEN}`,
+            },
+            body: JSON.stringify(p),
+          });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const saved = await r.json();
+          alert("Guardado en API: " + saved.id);
+          // refrescar lista
+          const rl = await fetch(`${API}/api/piezas`, {
+            cache: "no-store",
+          }).then((x) => x.json());
+          piezas = rl;
+          renderLista(piezas);
+          setForm(saved);
+        } catch (e) {
+          alert("Error guardando: " + e.message);
+        }
+      }
+
+      async function borrar() {
+        if (!TOKEN) return alert("Falta token admin.");
+        const id = els("id").value.trim();
+        if (!id) return alert("Completa el ID");
+        if (!confirm(`Borrar pieza ${id}?`)) return;
+        try {
+          const r = await fetch(`${API}/api/piezas/${encodeURIComponent(id)}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${TOKEN}` },
+          });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          alert("Pieza borrada (si existía).");
+          const rl = await fetch(`${API}/api/piezas`, {
+            cache: "no-store",
+          }).then((x) => x.json());
+          piezas = rl;
+          renderLista(piezas);
+          nuevo();
+        } catch (e) {
+          alert("Error borrando: " + e.message);
+        }
+      }
+
+      function exportar() {
+        if (!TOKEN) return alert("Falta token admin.");
+        window.open(`${API}/api/export`, "_blank");
+      }
+
+      init();
+    </script>
+  </body>
+</html>
