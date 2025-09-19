@@ -63,78 +63,93 @@ const norm = (body = {}) => {
 };
 
 // ---------- Capa de datos (PG ó Memoria) ----------
-const USE_PG = !!process.env.DATABASE_URL;
+const url = process.env.DATABASE_URL || "";
+let USE_PG = /^postgres(ql)?:\/\//i.test(url); // solo válido si empieza por postgres://
 
 let db = {};
 if (USE_PG) {
-  const { default: pg } = await import("pg");
-  const { Pool } = pg;
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
+  try {
+    const { default: pg } = await import("pg");
+    const { Pool } = pg;
+    const pool = new Pool({
+      connectionString: url,
+      ssl: { rejectUnauthorized: false },
+    });
 
-  // Crear tabla si no existe
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS piezas (
-      id            TEXT PRIMARY KEY,
-      titulo        TEXT NOT NULL,
-      descripcion   TEXT,
-      img           TEXT,
-      audio         TEXT,
-      video         TEXT,
-      lectura_auto  BOOLEAN DEFAULT FALSE,
-      etiquetas     TEXT[] DEFAULT '{}',
-      actualizado   TIMESTAMPTZ DEFAULT now()
-    );
-  `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS piezas (
+        id TEXT PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        descripcion TEXT,
+        img TEXT,
+        audio TEXT,
+        video TEXT,
+        lectura_auto BOOLEAN DEFAULT FALSE,
+        etiquetas TEXT[] DEFAULT '{}',
+        actualizado TIMESTAMPTZ DEFAULT now()
+      );`);
 
-  db.list = async () => {
-    const { rows } = await pool.query(
-      `SELECT id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado
+    db.list = async () =>
+      (
+        await pool.query(
+          `SELECT id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado
        FROM piezas ORDER BY id ASC`
-    );
-    return rows;
-  };
-  db.get = async (id) => {
-    const { rows } = await pool.query(
-      `SELECT id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado
+        )
+      ).rows;
+
+    db.get = async (id) =>
+      (
+        await pool.query(
+          `SELECT id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado
        FROM piezas WHERE id=$1 LIMIT 1`,
-      [id]
+          [id]
+        )
+      ).rows[0] || null;
+
+    db.upsert = async (p) => {
+      await pool.query(
+        `
+        INSERT INTO piezas(id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8, now())
+        ON CONFLICT (id) DO UPDATE SET
+          titulo=EXCLUDED.titulo, descripcion=EXCLUDED.descripcion,
+          img=EXCLUDED.img, audio=EXCLUDED.audio, video=EXCLUDED.video,
+          lectura_auto=EXCLUDED.lectura_auto, etiquetas=EXCLUDED.etiquetas,
+          actualizado=now()
+      `,
+        [
+          p.id,
+          p.titulo,
+          p.descripcion,
+          p.img,
+          p.audio,
+          p.video,
+          p.lectura_auto,
+          Array.isArray(p.etiquetas)
+            ? p.etiquetas
+            : String(p.etiquetas || "")
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+        ]
+      );
+      return { ...p, actualizado: new Date().toISOString() };
+    };
+
+    db.remove = async (id) =>
+      (await pool.query(`DELETE FROM piezas WHERE id=$1`, [id])).rowCount;
+    db.exportAll = async () => await db.list();
+  } catch (e) {
+    console.error(
+      "DB connection failed, falling back to memory:",
+      e?.message || e
     );
-    return rows[0] || null;
-  };
-  db.upsert = async (p) => {
-    await pool.query(
-      `
-      INSERT INTO piezas(id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8, now())
-      ON CONFLICT (id) DO UPDATE SET
-        titulo=EXCLUDED.titulo, descripcion=EXCLUDED.descripcion,
-        img=EXCLUDED.img, audio=EXCLUDED.audio, video=EXCLUDED.video,
-        lectura_auto=EXCLUDED.lectura_auto, etiquetas=EXCLUDED.etiquetas,
-        actualizado=now()
-    `,
-      [
-        p.id,
-        p.titulo,
-        p.descripcion,
-        p.img,
-        p.audio,
-        p.video,
-        p.lectura_auto,
-        p.etiquetas,
-      ]
-    );
-    return { ...p, actualizado: new Date().toISOString() };
-  };
-  db.remove = async (id) => {
-    const r = await pool.query(`DELETE FROM piezas WHERE id=$1`, [id]);
-    return r.rowCount;
-  };
-  db.exportAll = async () => await db.list();
-} else {
-  // ---- Memoria (demo) ----
+    USE_PG = false;
+  }
+}
+
+if (!USE_PG) {
+  // ---- Memoria (fallback) ----
   const piezas = [
     {
       id: "001",
@@ -175,7 +190,7 @@ if (USE_PG) {
   };
   db.remove = async (id) => {
     const before = piezas.length;
-    for (let i = piezas.length - 1; i >= 0; i--)
+    for (let i = before - 1; i >= 0; i--)
       if (piezas[i].id === id) piezas.splice(i, 1);
     return before - piezas.length;
   };
