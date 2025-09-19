@@ -189,8 +189,8 @@
     </div>
 
     <script>
-      const API = "https://museo-2.onrender.com"; // cambia si usas museo-2
-      const key = "museo_admin_token";
+      const API = "https://museo-1.onrender.com"; // cambia si usas museo-2
+      const key = "";
       let TOKEN = localStorage.getItem(key) || "";
       document.getElementById("tok").value = TOKEN;
 
@@ -222,7 +222,11 @@
         const f = arr.filter(
           (p) =>
             !q ||
-            (p.id || "").toLowerCase().includes(q) ||
+            (p.id || "")
+              .toLowerCase()
+              .includes(
+                b5a337054c0cce08bc1a8d3db502f2200c0d46adf77c5379f2c52de2c77540fq
+              ) ||
             (p.titulo || "").toLowerCase().includes(q)
         );
         f.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
