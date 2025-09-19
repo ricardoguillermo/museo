@@ -3,8 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Museo — Viewer</title>
-    <link rel="icon" href="data:," />
+    <title>Museo Itinerante — Viewer</title>
     <style>
       :root {
         --bg: #f6f7f9;
@@ -63,24 +62,26 @@
   <body>
     <header>
       <div class="bar">
-        <a href="index.html"><button>Inicio</button></a>
-        <button onclick="history.back()">Volver</button>
         <button id="btnTema">Claro/Oscuro</button>
+        <button onclick="history.back()">Volver</button>
       </div>
       <div class="bar">
         <a id="wa" target="_blank"><button>WhatsApp</button></a>
         <button id="copyMail">Copiar email</button>
       </div>
+      <link rel="icon" href="data:," />
     </header>
 
     <div class="wrap">
       <h1 id="titulo">Cargando…</h1>
       <p id="desc" class="muted"></p>
+
       <div class="media">
         <img id="img" alt="" loading="lazy" />
         <audio id="audio" controls></audio>
         <video id="video" controls playsinline></video>
       </div>
+
       <div class="bar" style="margin-top: 10px">
         <button id="btnLeer">🔊 Leer descripción</button>
         <button id="btnQR" onclick="verQR()">Ver QR</button>
@@ -89,9 +90,10 @@
 
     <script>
       const API = "https://museo-1.onrender.com";
-      const DB = "./piezas.json"; // fallback local
+      // 1) Cargar pieza desde piezas.json por ?id=001
       const params = new URLSearchParams(location.search);
       const id = params.get("id");
+      const DB = "./piezas.json"; // local por ahora
 
       async function cargar() {
         const titulo = document.getElementById("titulo");
@@ -99,23 +101,27 @@
         const img = document.getElementById("img");
         const a = document.getElementById("audio");
         const v = document.getElementById("video");
+
         let p = null;
 
+        // 1) Intento desde la API
         try {
+          console.log("API:", API, "ID:", id);
           const r = await fetch(`${API}/api/piezas/${encodeURIComponent(id)}`, {
             cache: "no-store",
           });
-          if (r.ok) p = await r.json();
           console.log(
             "Status:",
             r.status,
             "ACAO:",
             r.headers.get("access-control-allow-origin")
           );
+          if (r.ok) p = await r.json();
         } catch (e) {
-          console.warn("Fallo API:", e);
+          console.warn("Fallo fetch API:", e);
         }
 
+        // 2) Fallback local (JSON) si la API no respondió bien
         if (!p) {
           try {
             const res = await fetch(DB, { cache: "no-store" });
@@ -125,10 +131,12 @@
             titulo.textContent = "Error cargando pieza";
             desc.textContent =
               (e && e.message) || "Sin conexión con la API y sin JSON local.";
+            console.error(e);
             return;
           }
         }
 
+        // 3) Pintar contenido
         if (!p) {
           titulo.textContent = "No encontrada";
           return;
@@ -136,25 +144,33 @@
 
         titulo.textContent = `${p.id} — ${p.titulo}`;
         desc.textContent = p.descripcion || "";
+
         img.src = p.img || "";
         img.style.display = p.img ? "" : "none";
+
         a.src = p.audio || "";
         a.style.display = p.audio ? "" : "none";
+
         v.src = p.video || "";
         v.style.display = p.video ? "" : "none";
 
+        // WhatsApp comparte la URL actual
         document.getElementById(
           "wa"
         ).href = `https://wa.me/?text=${encodeURIComponent(location.href)}`;
+
+        // Botón "Ver QR" (desde tu API)
+        window.verQR = () => {
+          const qrUrl = `${API}/api/qrcode?url=${encodeURIComponent(
+            location.href
+          )}`;
+          window.open(qrUrl, "_blank");
+        };
+
+        // Lectura automática
         if (p.lectura_auto && p.descripcion) leer(p.descripcion);
       }
 
-      function verQR() {
-        const url = `${API}/api/qrcode?url=${encodeURIComponent(
-          location.href
-        )}`;
-        window.open(url, "_blank");
-      }
       function leer(txt) {
         try {
           speechSynthesis.cancel();
@@ -163,20 +179,32 @@
           speechSynthesis.speak(u);
         } catch {}
       }
+
       document.getElementById("btnLeer").onclick = () => {
         const d = document.getElementById("desc").textContent;
         if (d) leer(d);
       };
+
       document.getElementById("copyMail").onclick = async () => {
         await navigator.clipboard.writeText("tucorreo@ejemplo.com");
         alert("Email copiado.");
       };
+
       document.getElementById("btnTema").onclick = () => {
         const dark = document.body.dataset.theme === "dark";
         document.body.dataset.theme = dark ? "" : "dark";
         document.body.style.background = dark ? "var(--bg)" : "#111";
         document.body.style.color = dark ? "var(--fg)" : "#eee";
       };
+
+      function verQR() {
+        // Por ahora abrimos un generador de QR público con la URL actual.
+        // Luego lo reemplazamos por tu API en Render.
+        const url = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+          location.href
+        )}`;
+        window.open(url, "_blank");
+      }
 
       cargar();
     </script>

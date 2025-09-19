@@ -1,10 +1,9 @@
-// server.js — API Museo (PG ó Memoria) con subida a Bunny
-// Node 20+, package.json con "type": "module"
+// server.js — API Museo (PG ó Memoria)
+// Requiere Node 20+ y "type": "module" en package.json
 
 import express from "express";
 import cors from "cors";
 import QRCode from "qrcode";
-import multer from "multer";
 
 const app = express();
 app.use(express.json());
@@ -13,11 +12,10 @@ app.use(express.json());
 const allow = [
   ...String(process.env.ALLOW_ORIGIN || "")
     .split(",")
-    .map((s) => s.trim().replace(/\/$/, "")),
+    .map((s) => s.trim().replace(/\/$/, "")) // admite coma-separado
+    .filter(Boolean),
   "http://localhost:5500",
-  "https://museoqr.netlify.app",
-].filter(Boolean);
-
+];
 app.use(
   cors({
     origin: (origin, cb) =>
@@ -66,7 +64,7 @@ const norm = (body = {}) => {
 
 // ---------- Capa de datos (PG ó Memoria) ----------
 const url = process.env.DATABASE_URL || "";
-let USE_PG = /^postgres(ql)?:\/\//i.test(url); // válido si empieza por postgres://
+let USE_PG = /^postgres(ql)?:\/\//i.test(url); // solo válido si empieza por postgres://
 
 let db = {};
 if (USE_PG) {
@@ -157,7 +155,7 @@ if (!USE_PG) {
       id: "001",
       titulo: "Pata de vaca",
       descripcion: "Árbol ornamental…",
-      img: "https://TU-PULLZONE.b-cdn.net/media/img/pata_de_vaca.jpg",
+      img: "",
       audio: "",
       video: "",
       lectura_auto: true,
@@ -168,7 +166,7 @@ if (!USE_PG) {
       id: "002",
       titulo: "Lapacho amarillo",
       descripcion: "Floración intensa…",
-      img: "https://TU-PULLZONE.b-cdn.net/media/img/lapacho.jpg",
+      img: "",
       audio: "",
       video: "",
       lectura_auto: false,
@@ -199,7 +197,7 @@ if (!USE_PG) {
   db.exportAll = async () => piezas;
 }
 
-// ---------- Endpoints CRUD ----------
+// ---------- Endpoints ----------
 app.get("/api/piezas", async (_req, res) => {
   const rows = await db.list();
   res.set("Cache-Control", "no-store");
@@ -240,61 +238,6 @@ app.get("/api/qrcode", async (req, res) => {
   res.set("Content-Type", "image/png");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.send(png);
-});
-
-// ---------- Upload a Bunny ----------
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
-});
-app.post("/api/upload", auth, upload.single("file"), async (req, res) => {
-  try {
-    const ZONE = process.env.BUNNY_STORAGE_ZONE;
-    const HOST = (
-      process.env.BUNNY_STORAGE_HOST || "storage.bunnycdn.com"
-    ).replace(/^https?:\/\//, "");
-    const KEY = process.env.BUNNY_API_KEY;
-    const PULL = (process.env.BUNNY_PULLZONE_HOST || "TU-PULLZONE.b-cdn.net")
-      .replace(/^https?:\/\//, "")
-      .replace(/\/$/, "");
-
-    if (!ZONE || !HOST || !KEY || !PULL)
-      return res.status(500).json({ error: "Bunny no configurado" });
-    if (!req.file)
-      return res.status(400).json({ error: "Falta archivo 'file'" });
-
-    const kind = (req.body.kind || "img").replace(/[^a-z]/g, "");
-    let base = (
-      req.body.filename ||
-      req.file.originalname ||
-      "archivo"
-    ).replace(/[^a-zA-Z0-9._-]/g, "_");
-    if (!base.includes(".")) {
-      const ext = (req.file.mimetype.split("/")[1] || "").split(";")[0];
-      if (ext) base = base + "." + ext;
-    }
-    const path = `media/${kind}/${base}`;
-
-    const urlPut = `https://${HOST}/${encodeURIComponent(ZONE)}/${path}`;
-    const r = await fetch(urlPut, {
-      method: "PUT",
-      headers: { AccessKey: KEY, "Content-Type": "application/octet-stream" },
-      body: req.file.buffer,
-    });
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      return res.status(502).json({
-        error: "Bunny rechazó la subida",
-        status: r.status,
-        body: txt,
-      });
-    }
-
-    const cdnUrl = `https://${PULL}/${path}`;
-    res.json({ ok: true, kind, path, cdnUrl });
-  } catch (e) {
-    res.status(500).json({ error: e?.message || String(e) });
-  }
 });
 
 // ---------- Listen ----------

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Museo — Admin</title>
+    <title>Museo — Admin simple</title>
     <link rel="icon" href="data:," />
     <style>
       :root {
@@ -67,8 +67,7 @@
         margin: 8px 0;
       }
       input,
-      textarea,
-      select {
+      textarea {
         padding: 10px 12px;
         border-radius: 10px;
         border: 1px solid #ddd;
@@ -113,7 +112,7 @@
   </head>
   <body>
     <header>
-      <div><b>Museo — Admin</b></div>
+      <div><b>Museo — Admin simple</b></div>
       <nav class="bar">
         <a class="btn" href="index.html" style="background: #fff">Lista</a>
         <a class="btn" href="view.html?id=001" style="background: #fff"
@@ -131,6 +130,7 @@
 
     <div class="wrap">
       <div class="grid">
+        <!-- LISTA -->
         <div class="panel">
           <div class="row" style="grid-template-columns: 1fr">
             <input id="buscar" placeholder="Buscar por id/título…" />
@@ -138,6 +138,7 @@
           <div id="lista" class="list"></div>
         </div>
 
+        <!-- FORM -->
         <div class="panel">
           <h3 id="tituloForm" style="margin-top: 0">Nueva pieza</h3>
 
@@ -175,34 +176,9 @@
             <button class="btn" onclick="qr()">Ver QR</button>
           </div>
 
-          <div class="panel" style="margin-top: 12px">
-            <h3 style="margin-top: 0">Subir a CDN (Bunny)</h3>
-            <div class="row">
-              <label>Tipo</label>
-              <select id="up_kind">
-                <option value="img">Imagen</option>
-                <option value="audio">Audio</option>
-                <option value="video">Video</option>
-              </select>
-            </div>
-            <div class="row">
-              <label>Archivo</label><input id="up_file" type="file" />
-            </div>
-            <div class="row">
-              <label>Nombre</label
-              ><input id="up_name" placeholder="(opcional) ej: 001.jpg" />
-            </div>
-            <div class="btns">
-              <button class="btn" onclick="subirCDN()">Subir a CDN</button>
-            </div>
-            <p class="muted">
-              Tras subir, se autocompleta la URL en el campo correspondiente.
-            </p>
-          </div>
-
           <p class="muted">
-            Este admin escribe en memoria o en Postgres según tu server. Usa
-            “Exportar todo” como backup.
+            Este admin escribe en memoria del servidor (se pierde al redeploy).
+            Usá “Exportar todo” para respaldo.
           </p>
           <div id="prev" class="muted">
             <p>Previsualización:</p>
@@ -213,8 +189,8 @@
     </div>
 
     <script>
-      const API = "https://museo-1.onrender.com";
-      const key = "museo_admin_token";
+      const API = "https://museo-1.onrender.com"; // cambia si usas museo-2
+      const key = "";
       let TOKEN = localStorage.getItem(key) || "";
       document.getElementById("tok").value = TOKEN;
 
@@ -237,6 +213,7 @@
           els(
             "lista"
           ).innerHTML = `<div class="muted">Error cargando lista: ${e.message}</div>`;
+          console.error(e);
         }
       }
 
@@ -245,7 +222,11 @@
         const f = arr.filter(
           (p) =>
             !q ||
-            (p.id || "").toLowerCase().includes(q) ||
+            (p.id || "")
+              .toLowerCase()
+              .includes(
+                b5a337054c0cce08bc1a8d3db502f2200c0d46adf77c5379f2c52de2c77540fq
+              ) ||
             (p.titulo || "").toLowerCase().includes(q)
         );
         f.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
@@ -358,9 +339,12 @@
         els("prevImg").src = src || "";
         els("prevImg").style.display = src ? "" : "none";
       }
+      ["img"].forEach((id) =>
+        els(id).addEventListener("input", actualizarPreview)
+      );
 
       async function guardar() {
-        if (!TOKEN) return alert("Falta token admin.");
+        if (!TOKEN) return alert("Falta token admin. Cárgalo arriba.");
         const p = getForm();
         try {
           const r = await fetch(`${API}/api/piezas`, {
@@ -371,15 +355,16 @@
             },
             body: JSON.stringify(p),
           });
-          const data = await r.json();
-          if (!r.ok) throw new Error(data?.error || "HTTP " + r.status);
-          alert("Guardado en API: " + data.id);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          const saved = await r.json();
+          alert("Guardado en API: " + saved.id);
+          // refrescar lista
           const rl = await fetch(`${API}/api/piezas`, {
             cache: "no-store",
           }).then((x) => x.json());
           piezas = rl;
           renderLista(piezas);
-          setForm(data);
+          setForm(saved);
         } catch (e) {
           alert("Error guardando: " + e.message);
         }
@@ -395,8 +380,7 @@
             method: "DELETE",
             headers: { Authorization: `Bearer ${TOKEN}` },
           });
-          const data = await r.json();
-          if (!r.ok) throw new Error(data?.error || "HTTP " + r.status);
+          if (!r.ok) throw new Error("HTTP " + r.status);
           alert("Pieza borrada (si existía).");
           const rl = await fetch(`${API}/api/piezas`, {
             cache: "no-store",
@@ -412,42 +396,6 @@
       function exportar() {
         if (!TOKEN) return alert("Falta token admin.");
         window.open(`${API}/api/export`, "_blank");
-      }
-
-      async function subirCDN() {
-        if (!TOKEN) return alert("Falta token admin.");
-        const f = document.getElementById("up_file").files[0];
-        if (!f) return alert("Elegí un archivo.");
-        const kind = document.getElementById("up_kind").value;
-        let filename = document.getElementById("up_name").value.trim();
-        if (!filename) {
-          const id = document.getElementById("id").value.trim() || "archivo";
-          const ext = (f.name.split(".").pop() || "").toLowerCase();
-          filename = ext ? `${id}.${ext}` : id;
-        }
-
-        const fd = new FormData();
-        fd.append("file", f);
-        fd.append("kind", kind);
-        fd.append("filename", filename);
-
-        try {
-          const r = await fetch(`${API}/api/upload`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${TOKEN}` },
-            body: fd,
-          });
-          const data = await r.json();
-          if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-          if (kind === "img") els("img").value = data.cdnUrl;
-          if (kind === "audio") els("audio").value = data.cdnUrl;
-          if (kind === "video") els("video").value = data.cdnUrl;
-          actualizarPreview();
-          alert("Subido: " + data.cdnUrl);
-        } catch (e) {
-          alert("Error subiendo: " + e.message);
-          console.error(e);
-        }
       }
 
       init();

@@ -90,8 +90,6 @@
         border-radius: 10px;
         background: #eee;
         cursor: pointer;
-        text-decoration: none;
-        color: inherit;
       }
       .btn.primary {
         background: var(--accent);
@@ -103,7 +101,7 @@
     <header>
       <div class="brand">Museo — Lista de piezas</div>
       <div>
-        <a class="btn" href="admin.html" style="background: #fff">Admin</a>
+        <button class="btn" onclick="openContacto()">Contacto</button>
       </div>
     </header>
 
@@ -119,6 +117,30 @@
       <div id="grid" class="grid"></div>
     </div>
 
+    <!-- Modal contacto simple -->
+    <dialog
+      id="dlg"
+      style="
+        border: none;
+        border-radius: 14px;
+        padding: 0;
+        max-width: 420px;
+        width: 92%;
+      "
+    >
+      <div style="padding: 16px">
+        <h3 style="margin: 0 0 8px 0">Contacto</h3>
+        <p class="muted" style="margin-top: 0">
+          Comparte el enlace o escríbeme.
+        </p>
+        <div class="btns">
+          <a id="wa" class="btn primary" target="_blank">WhatsApp</a>
+          <button class="btn" onclick="copiarEmail()">Copiar email</button>
+          <button class="btn" onclick="closeContacto()">Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+
     <script>
       const API = "https://museo-1.onrender.com"; // ← tu API
       const grid = document.getElementById("grid");
@@ -129,6 +151,7 @@
       let piezas = [],
         filtradas = [];
 
+      // Cargar listado desde la API
       async function init() {
         try {
           const r = await fetch(`${API}/api/piezas`, { cache: "no-store" });
@@ -166,22 +189,23 @@
               ? `<img class="thumb" src="${p.img}" alt="">`
               : `<div class="thumb"></div>`;
             return `
-        <div class="card">
-          ${th}
-          <div class="title">${p.id} — ${p.titulo || ""}</div>
-          <div class="muted">${(p.descripcion || "").slice(0, 120)}${
+          <div class="card">
+            ${th}
+            <div class="title">${p.id} — ${p.titulo || ""}</div>
+            <div class="muted">${(p.descripcion || "").slice(0, 120)}${
               (p.descripcion || "").length > 120 ? "…" : ""
             }</div>
-          <div class="btns">
-            <a class="btn primary" href="${viewer}">Ver</a>
-            <a class="btn" target="_blank" href="${qr}">QR</a>
-            <button class="btn" onclick="copiar('${viewerAbs}')">Copiar enlace</button>
-          </div>
-        </div>`;
+            <div class="btns">
+              <a class="btn primary" href="${viewer}">Ver</a>
+              <a class="btn" target="_blank" href="${qr}">QR</a>
+              <button class="btn" onclick="copiar('${viewerAbs}')">Copiar enlace</button>
+            </div>
+          </div>`;
           })
           .join("");
       }
 
+      // Filtros
       function aplicarFiltros() {
         const t = (q.value || "").toLowerCase().trim();
         const et = tag.value;
@@ -198,8 +222,23 @@
       q.addEventListener("input", aplicarFiltros);
       tag.addEventListener("change", aplicarFiltros);
 
+      // Utilidades UI
       function copiar(txt) {
         navigator.clipboard.writeText(txt).then(() => alert("Enlace copiado"));
+      }
+      function openContacto() {
+        document.getElementById(
+          "wa"
+        ).href = `https://wa.me/?text=${encodeURIComponent(location.href)}`;
+        document.getElementById("dlg").showModal();
+      }
+      function closeContacto() {
+        document.getElementById("dlg").close();
+      }
+      function copiarEmail() {
+        navigator.clipboard
+          .writeText("tucorreo@ejemplo.com")
+          .then(() => alert("Email copiado"));
       }
 
       init();

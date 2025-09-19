@@ -1,24 +1,24 @@
 [
   {
     "id": "001",
-    "titulo": "Caballo",
-    "descripcion": "Es un animal de cuatro patas, domesticado por el hombre desde hace miles de años.",
-    "img": "./media/img/caballo.jpg",
-    "audio": "./media/audio/caballo.mp3",
+    "titulo": "Pata de vaca",
+    "descripcion": "Árbol ornamental con flores rosadas. Muy usado en veredas.",
+    "img": "https://TU-PULLZONE.b-cdn.net/media/img/pata_de_vaca.jpg",
+    "audio": "",
     "video": "",
     "lectura_auto": true,
-    "etiquetas": ["animales"],
-    "actualizado": "2025-09-12T15:00:00Z"
+    "etiquetas": ["botánica"],
+    "actualizado": "2025-09-19T00:00:00Z"
   },
   {
     "id": "002",
-    "titulo": "Elefante",
-    "descripcion": "Elefante es el nombre común de los mamíferos terrestres más grandes que existen en la actualidad.",
-    "img": "./media/img/elefante.jpg",
-    "audio": "./media/audio/elefante.mp3",
+    "titulo": "Lapacho amarillo",
+    "descripcion": "Floración intensa a fines de invierno y principios de primavera.",
+    "img": "https://TU-PULLZONE.b-cdn.net/media/img/lapacho.jpg",
+    "audio": "",
     "video": "",
     "lectura_auto": false,
     "etiquetas": ["botánica"],
-    "actualizado": "2025-09-12T15:10:00Z"
+    "actualizado": "2025-09-19T00:00:00Z"
   }
 ]
