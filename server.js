@@ -1,48 +1,46 @@
-// server.js — API Museo (PG ó Memoria) con subida a Bunny
-// Node 20+, package.json con "type": "module"
+// server.js — API Museo (Node 20+, "type":"module")
+// CORS blindado + CRUD + Postgres fallback + QR + Upload a Bunny
 
 import express from "express";
-import cors from "cors";
 import QRCode from "qrcode";
 import multer from "multer";
 
 const app = express();
 app.use(express.json());
 
-// ---------- CORS ----------
-const allow = [
-  ...String(process.env.ALLOW_ORIGIN || "")
+// ---------------- CORS BLINDADO ----------------
+const ALLOW_SET = new Set(
+  String(process.env.ALLOW_ORIGIN || "")
     .split(",")
-    .map((s) => s.trim().replace(/\/$/, "")),
-  "http://localhost:5500",
-  "https://museoqr.netlify.app",
-].filter(Boolean);
-
-app.use(
-  cors({
-    origin: (origin, cb) =>
-      cb(null, !origin || allow.includes(origin.replace(/\/$/, ""))),
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
+    .map((s) => s.trim().replace(/\/$/, "")) // sin barra final
+    .filter(Boolean)
 );
-app.options("*", cors());
 
-// ojo parche
-// Respuesta explícita al preflight del upload (por si algo intercepta)
-app.options("/api/upload", (req, res) => {
-  const o = req.headers.origin || "";
-  res.header("Access-Control-Allow-Origin", o || "*");
-  res.header("Vary", "Origin");
-  res.header("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Authorization,Content-Type");
-  res.sendStatus(204);
+// agrega tus orígenes de dev si querés
+ALLOW_SET.add("http://localhost:5500");
+
+app.use((req, res, next) => {
+  const origin = (req.headers.origin || "").replace(/\/$/, "");
+  if (origin && (ALLOW_SET.has(origin) || ALLOW_SET.has("*"))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,DELETE,OPTIONS"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type"
+    );
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204); // preflight OK siempre
+  next();
 });
 
-// ---------- Health ----------
+// ---------------- Health ----------------
 app.get("/", (_req, res) => res.status(200).send("OK Museo API"));
 
-// ---------- Auth por token ----------
+// ---------------- Auth por token ----------------
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || null;
 function auth(req, res, next) {
   if (!ADMIN_TOKEN)
@@ -55,7 +53,7 @@ function auth(req, res, next) {
   next();
 }
 
-// Normalizador
+// ---------------- Normalizador ----------------
 const norm = (body = {}) => {
   const etiquetas = Array.isArray(body.etiquetas)
     ? body.etiquetas
@@ -75,9 +73,9 @@ const norm = (body = {}) => {
   };
 };
 
-// ---------- Capa de datos (PG ó Memoria) ----------
+// ---------------- Capa de datos (PG ó Memoria) ----------------
 const url = process.env.DATABASE_URL || "";
-let USE_PG = /^postgres(ql)?:\/\//i.test(url); // válido si empieza por postgres://
+let USE_PG = /^postgres(ql)?:\/\//i.test(url);
 
 let db = {};
 if (USE_PG) {
@@ -100,7 +98,8 @@ if (USE_PG) {
         lectura_auto BOOLEAN DEFAULT FALSE,
         etiquetas TEXT[] DEFAULT '{}',
         actualizado TIMESTAMPTZ DEFAULT now()
-      );`);
+      );
+    `);
 
     db.list = async () =>
       (
@@ -125,9 +124,13 @@ if (USE_PG) {
         INSERT INTO piezas(id,titulo,descripcion,img,audio,video,lectura_auto,etiquetas,actualizado)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8, now())
         ON CONFLICT (id) DO UPDATE SET
-          titulo=EXCLUDED.titulo, descripcion=EXCLUDED.descripcion,
-          img=EXCLUDED.img, audio=EXCLUDED.audio, video=EXCLUDED.video,
-          lectura_auto=EXCLUDED.lectura_auto, etiquetas=EXCLUDED.etiquetas,
+          titulo=EXCLUDED.titulo,
+          descripcion=EXCLUDED.descripcion,
+          img=EXCLUDED.img,
+          audio=EXCLUDED.audio,
+          video=EXCLUDED.video,
+          lectura_auto=EXCLUDED.lectura_auto,
+          etiquetas=EXCLUDED.etiquetas,
           actualizado=now()
       `,
         [
@@ -162,31 +165,7 @@ if (USE_PG) {
 }
 
 if (!USE_PG) {
-  // ---- Memoria (fallback) ----
-  const piezas = [
-    {
-      id: "001",
-      titulo: "Pata de vaca",
-      descripcion: "Árbol ornamental…",
-      img: "https://TU-PULLZONE.b-cdn.net/media/img/pata_de_vaca.jpg",
-      audio: "",
-      video: "",
-      lectura_auto: true,
-      etiquetas: ["botánica"],
-      actualizado: new Date().toISOString(),
-    },
-    {
-      id: "002",
-      titulo: "Lapacho amarillo",
-      descripcion: "Floración intensa…",
-      img: "https://TU-PULLZONE.b-cdn.net/media/img/lapacho.jpg",
-      audio: "",
-      video: "",
-      lectura_auto: false,
-      etiquetas: ["botánica"],
-      actualizado: new Date().toISOString(),
-    },
-  ];
+  const piezas = []; // arranca vacío en memoria
   db.list = async () =>
     piezas.slice().sort((a, b) => (a.id || "").localeCompare(b.id || ""));
   db.get = async (id) => piezas.find((x) => x.id === id) || null;
@@ -210,40 +189,45 @@ if (!USE_PG) {
   db.exportAll = async () => piezas;
 }
 
-// ---------- Endpoints CRUD ----------
+// ---------------- Endpoints CRUD ----------------
 app.get("/api/piezas", async (_req, res) => {
   const rows = await db.list();
   res.set("Cache-Control", "no-store");
   res.json(rows);
 });
+
 app.get("/api/piezas/:id", async (req, res) => {
   const p = await db.get(req.params.id);
   if (!p) return res.status(404).json({ error: "No encontrada" });
   res.set("Cache-Control", "no-store");
   res.json(p);
 });
+
 app.post("/api/piezas", auth, async (req, res) => {
   const p = norm(req.body || {});
   if (!p.id || !p.titulo)
     return res.status(400).json({ error: "id y titulo son obligatorios" });
   res.json(await db.upsert(p));
 });
+
 app.put("/api/piezas/:id", auth, async (req, res) => {
   const p = norm({ ...req.body, id: req.params.id });
   if (!p.id || !p.titulo)
     return res.status(400).json({ error: "id y titulo son obligatorios" });
   res.json(await db.upsert(p));
 });
+
 app.delete("/api/piezas/:id", auth, async (req, res) => {
   const removed = await db.remove(req.params.id);
   res.json({ ok: true, removed });
 });
+
 app.get("/api/export", auth, async (_req, res) => {
   res.set("Cache-Control", "no-store");
   res.json(await db.exportAll());
 });
 
-// ---------- QR ----------
+// ---------------- QR ----------------
 app.get("/api/qrcode", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).send("Falta ?url=");
@@ -253,11 +237,12 @@ app.get("/api/qrcode", async (req, res) => {
   res.send(png);
 });
 
-// ---------- Upload a Bunny ----------
+// ---------------- Upload a Bunny ----------------
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
 });
+
 app.post("/api/upload", auth, upload.single("file"), async (req, res) => {
   try {
     const ZONE = process.env.BUNNY_STORAGE_ZONE;
@@ -265,12 +250,19 @@ app.post("/api/upload", auth, upload.single("file"), async (req, res) => {
       process.env.BUNNY_STORAGE_HOST || "storage.bunnycdn.com"
     ).replace(/^https?:\/\//, "");
     const KEY = process.env.BUNNY_API_KEY;
-    const PULL = (process.env.BUNNY_PULLZONE_HOST || "TU-PULLZONE.b-cdn.net")
+    const PULL = (process.env.BUNNY_PULLZONE_HOST || "")
       .replace(/^https?:\/\//, "")
       .replace(/\/$/, "");
 
-    if (!ZONE || !HOST || !KEY || !PULL)
-      return res.status(500).json({ error: "Bunny no configurado" });
+    // Diagnóstico: indica qué falta
+    const missing = [];
+    if (!ZONE) missing.push("BUNNY_STORAGE_ZONE");
+    if (!HOST) missing.push("BUNNY_STORAGE_HOST");
+    if (!KEY) missing.push("BUNNY_API_KEY");
+    if (!PULL) missing.push("BUNNY_PULLZONE_HOST");
+    if (missing.length)
+      return res.status(500).json({ error: "Bunny no configurado", missing });
+
     if (!req.file)
       return res.status(400).json({ error: "Falta archivo 'file'" });
 
@@ -282,7 +274,7 @@ app.post("/api/upload", auth, upload.single("file"), async (req, res) => {
     ).replace(/[^a-zA-Z0-9._-]/g, "_");
     if (!base.includes(".")) {
       const ext = (req.file.mimetype.split("/")[1] || "").split(";")[0];
-      if (ext) base = base + "." + ext;
+      if (ext) base += "." + ext;
     }
     const path = `media/${kind}/${base}`;
 
@@ -292,38 +284,25 @@ app.post("/api/upload", auth, upload.single("file"), async (req, res) => {
       headers: { AccessKey: KEY, "Content-Type": "application/octet-stream" },
       body: req.file.buffer,
     });
+
     if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      return res.status(502).json({
+      const bodyTxt = await r.text().catch(() => "");
+      console.error("Bunny upload error:", r.status, bodyTxt);
+      return res.status(r.status).json({
         error: "Bunny rechazó la subida",
-        status: r.status,
-        body: txt,
+        bunnyStatus: r.status,
+        bunnyBody: bodyTxt.slice(0, 400),
       });
     }
 
     const cdnUrl = `https://${PULL}/${path}`;
     res.json({ ok: true, kind, path, cdnUrl });
   } catch (e) {
-    const r = await fetch(urlPut, {
-      method: "PUT",
-      headers: { AccessKey: KEY, "Content-Type": "application/octet-stream" },
-      body: req.file.buffer,
-    });
-
-    if (!r.ok) {
-      const bodyTxt = await r.text().catch(() => "");
-      console.error("Bunny upload error:", r.status, bodyTxt);
-      // Devuelvo el status de Bunny para que lo veas en el admin
-      return res.status(r.status).json({
-        error: "Bunny rechazó la subida",
-        bunnyStatus: r.status,
-        bunnyBody: bodyTxt.slice(0, 400), // por si viene largo
-      });
-    }
+    res.status(500).json({ error: e?.message || String(e) });
   }
 });
 
-// ---------- Listen ----------
+// ---------------- Listen ----------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log("API OK en puerto", PORT, USE_PG ? "(Postgres)" : "(Memoria)")
