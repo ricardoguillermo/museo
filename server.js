@@ -28,6 +28,17 @@ app.use(
 );
 app.options("*", cors());
 
+// ojo parche
+// Respuesta explícita al preflight del upload (por si algo intercepta)
+app.options("/api/upload", (req, res) => {
+  const o = req.headers.origin || "";
+  res.header("Access-Control-Allow-Origin", o || "*");
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Authorization,Content-Type");
+  res.sendStatus(204);
+});
+
 // ---------- Health ----------
 app.get("/", (_req, res) => res.status(200).send("OK Museo API"));
 
@@ -293,7 +304,22 @@ app.post("/api/upload", auth, upload.single("file"), async (req, res) => {
     const cdnUrl = `https://${PULL}/${path}`;
     res.json({ ok: true, kind, path, cdnUrl });
   } catch (e) {
-    res.status(500).json({ error: e?.message || String(e) });
+    const r = await fetch(urlPut, {
+      method: "PUT",
+      headers: { AccessKey: KEY, "Content-Type": "application/octet-stream" },
+      body: req.file.buffer,
+    });
+
+    if (!r.ok) {
+      const bodyTxt = await r.text().catch(() => "");
+      console.error("Bunny upload error:", r.status, bodyTxt);
+      // Devuelvo el status de Bunny para que lo veas en el admin
+      return res.status(r.status).json({
+        error: "Bunny rechazó la subida",
+        bunnyStatus: r.status,
+        bunnyBody: bodyTxt.slice(0, 400), // por si viene largo
+      });
+    }
   }
 });
 
